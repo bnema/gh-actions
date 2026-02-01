@@ -1,0 +1,125 @@
+name: Go CI
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version to use'
+        type: string
+        default: 'stable'
+      lint-timeout:
+        description: 'golangci-lint timeout'
+        type: string
+        default: '5m'
+      lint-version:
+        description: 'golangci-lint version'
+        type: string
+        default: 'v2.8.0'
+      test-flags:
+        description: 'Flags passed to go test'
+        type: string
+        default: '-race -v ./...'
+      pre-command:
+        description: 'Command to run before lint/test (e.g. make build-frontend)'
+        type: string
+        default: ''
+      container:
+        description: 'Optional container image to run in'
+        type: string
+        default: ''
+      apt-packages:
+        description: 'Space-separated apt packages to install'
+        type: string
+        default: ''
+      pacman-packages:
+        description: 'Space-separated pacman packages to install'
+        type: string
+        default: ''
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || null }}
+    steps:
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          apt-get update && apt-get install -y ${{ inputs.apt-packages }}
+
+      - name: Install pacman packages
+        if: inputs.pacman-packages != ''
+        run: |
+          pacman -Syu --noconfirm ${{ inputs.pacman-packages }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v5
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-mod-
+
+      - name: Run pre-command
+        if: inputs.pre-command != ''
+        run: ${{ inputs.pre-command }}
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ inputs.lint-version }}
+          args: --timeout=${{ inputs.lint-timeout }}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || null }}
+    steps:
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          apt-get update && apt-get install -y ${{ inputs.apt-packages }}
+
+      - name: Install pacman packages
+        if: inputs.pacman-packages != ''
+        run: |
+          pacman -Syu --noconfirm ${{ inputs.pacman-packages }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v5
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-mod-
+
+      - name: Cache Go build
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+
+      - name: Run pre-command
+        if: inputs.pre-command != ''
+        run: ${{ inputs.pre-command }}
+
+      - name: Run tests
+        run: go test ${{ inputs.test-flags }}

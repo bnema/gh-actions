@@ -1,0 +1,74 @@
+name: Go Release
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version to use'
+        type: string
+        default: 'stable'
+      goreleaser-version:
+        description: 'GoReleaser version'
+        type: string
+        default: '~> v2'
+      goreleaser-args:
+        description: 'GoReleaser arguments'
+        type: string
+        default: 'release --clean'
+      node-version:
+        description: 'Node.js version (leave empty to skip)'
+        type: string
+        default: ''
+      apt-packages:
+        description: 'Space-separated apt packages to install'
+        type: string
+        default: ''
+      pre-command:
+        description: 'Command to run before goreleaser'
+        type: string
+        default: ''
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update && sudo apt-get install -y ${{ inputs.apt-packages }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Setup Node.js
+        if: inputs.node-version != ''
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Run pre-command
+        if: inputs.pre-command != ''
+        run: ${{ inputs.pre-command }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: ${{ inputs.goreleaser-version }}
+          args: ${{ inputs.goreleaser-args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

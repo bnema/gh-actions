@@ -1,0 +1,73 @@
+name: Frontend CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version'
+        type: string
+        default: '24'
+      package-manager:
+        description: 'Package manager: npm or bun'
+        type: string
+        default: 'npm'
+      working-directory:
+        description: 'Directory containing package.json'
+        type: string
+        default: '.'
+      run-svelte-check:
+        description: 'Run svelte-kit sync && svelte-check'
+        type: boolean
+        default: true
+      run-tsc:
+        description: 'Run tsc --noEmit'
+        type: boolean
+        default: false
+      run-eslint:
+        description: 'Run eslint (reads project eslint.config.js)'
+        type: boolean
+        default: true
+      eslint-args:
+        description: 'Arguments passed to eslint'
+        type: string
+        default: 'src'
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Setup Bun
+        if: inputs.package-manager == 'bun'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies (npm)
+        if: inputs.package-manager == 'npm'
+        run: npm ci
+
+      - name: Install dependencies (bun)
+        if: inputs.package-manager == 'bun'
+        run: bun install --frozen-lockfile
+
+      - name: Svelte check
+        if: inputs.run-svelte-check
+        run: npx svelte-kit sync && npx svelte-check --threshold error
+
+      - name: TypeScript check
+        if: inputs.run-tsc
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        if: inputs.run-eslint
+        run: npx eslint ${{ inputs.eslint-args }}
