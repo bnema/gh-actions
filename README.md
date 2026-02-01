@@ -1,12 +1,25 @@
 # gh-actions
 
-Reusable GitHub Actions workflows for Go, frontend (Svelte/TypeScript), and deployment.
+Shared GitHub Actions workflows. Add CI, releases, and deploys to a repo with a few lines of YAML.
 
-## Quick Start
+## Workflows
 
-### Go Project (CI + Release)
+| Workflow | What it does |
+|----------|-------------|
+| `go-ci.yml` | Lint with golangci-lint v2 + run tests |
+| `go-release.yml` | GoReleaser build on tag push (supports pre-releases) |
+| `frontend-ci.yml` | svelte-check, tsc, and/or ESLint (npm or bun) |
+| `dependabot-auto-merge.yml` | Auto-merge patch/minor Dependabot PRs |
+| `gordon-deploy.yml` | Build and push a container to a Gordon registry |
 
-`.github/workflows/ci.yml`:
+There's also a standalone composite action at `actions/docker-deploy` for pushing to any OCI registry.
+
+## Usage
+
+All workflows use `workflow_call`. Point your repo's workflow at one of these with `uses:`.
+
+### Go CI
+
 ```yaml
 name: CI
 on:
@@ -23,12 +36,28 @@ jobs:
       go-version: stable
 ```
 
-`.github/workflows/release.yml`:
+If you need to run something before lint/test (code generation, frontend build), use `pre-command`:
+
+```yaml
+    with:
+      pre-command: make build-frontend
+```
+
+For projects that need a specific container (GTK apps, for example):
+
+```yaml
+    with:
+      container: archlinux:latest
+      pacman-packages: git go webkitgtk-6.0 gtk4 base-devel
+```
+
+### Go Release
+
 ```yaml
 name: Release
 on:
   push:
-    tags: ['v*']  # v1.0.0, v1.0.0-rc1, v1.0.0-alpha.1
+    tags: ['v*']
 
 jobs:
   release:
@@ -39,35 +68,41 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### SvelteKit Project
+The `v*` pattern matches stable tags (`v1.0.0`) and pre-release tags (`v1.0.0-rc.1`, `v1.0.0-alpha.1`). GoReleaser handles the distinction if your `.goreleaser.yaml` includes:
 
 ```yaml
-name: CI
-on:
-  push:
-    branches: [main]
-  pull_request:
+release:
+  prerelease: auto
+git:
+  tag_sort: smartsemver
+```
 
+`prerelease: auto` reads the semver suffix and marks the GitHub release accordingly. `smartsemver` (GoReleaser v2.12+) generates changelogs against the previous stable release, not the last pre-release.
+
+### Frontend CI
+
+Works for SvelteKit, plain TypeScript, or both. Each check is toggled independently.
+
+SvelteKit with ESLint:
+```yaml
 jobs:
   check:
     uses: bnema/gh-actions/.github/workflows/frontend-ci.yml@main
     with:
-      package-manager: bun        # or npm
+      package-manager: bun
       run-svelte-check: true
       run-eslint: true
 ```
 
-### TypeScript Project (no Svelte)
-
+TypeScript only:
 ```yaml
-jobs:
-  check:
-    uses: bnema/gh-actions/.github/workflows/frontend-ci.yml@main
     with:
       run-svelte-check: false
       run-tsc: true
       run-eslint: true
 ```
+
+ESLint uses the project's own `eslint.config.js`. If that config includes `eslint-plugin-svelte`, Svelte files get linted. No workflow-side config needed.
 
 ### Gordon Deploy
 
@@ -99,96 +134,85 @@ jobs:
     uses: bnema/gh-actions/.github/workflows/dependabot-auto-merge.yml@main
 ```
 
----
+Merges patch and minor updates automatically. Major versions require manual review.
 
-## Workflows Reference
+### Docker Deploy (standalone action)
 
-### `go-ci.yml`
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `go-version` | string | `stable` | Go version |
-| `lint-timeout` | string | `5m` | golangci-lint timeout |
-| `lint-version` | string | `v2.8.0` | golangci-lint version |
-| `test-flags` | string | `-race -v ./...` | go test flags |
-| `pre-command` | string | `""` | Run before lint/test |
-| `container` | string | `""` | Container image |
-| `apt-packages` | string | `""` | apt packages to install |
-| `pacman-packages` | string | `""` | pacman packages to install |
-
-### `go-release.yml`
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `go-version` | string | `stable` | Go version |
-| `goreleaser-version` | string | `~> v2` | GoReleaser version |
-| `goreleaser-args` | string | `release --clean` | GoReleaser arguments |
-| `node-version` | string | `""` | Node.js version (optional) |
-| `apt-packages` | string | `""` | apt packages to install |
-| `pre-command` | string | `""` | Run before goreleaser |
-
-**Secrets:** `GITHUB_TOKEN` (required)
-
-### `frontend-ci.yml`
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `node-version` | string | `24` | Node.js version |
-| `package-manager` | string | `npm` | `npm` or `bun` |
-| `working-directory` | string | `.` | Directory with package.json |
-| `run-svelte-check` | boolean | `true` | Run svelte-check |
-| `run-tsc` | boolean | `false` | Run tsc --noEmit |
-| `run-eslint` | boolean | `true` | Run eslint |
-| `eslint-args` | string | `src` | Arguments for eslint |
-
-ESLint reads the project's own `eslint.config.js`. If the config includes `eslint-plugin-svelte`, Svelte files are linted automatically.
-
-### `dependabot-auto-merge.yml`
-
-| Input | Type | Default |
-|-------|------|---------|
-| `merge-method` | string | `squash` |
-
-Auto-merges patch and minor dependency updates from Dependabot.
-
-### `gordon-deploy.yml`
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `image` | string | `""` | Image name (defaults to repo name) |
-| `tag` | string | `""` | Override tag |
-| `dockerfile` | string | `./Dockerfile` | Dockerfile path |
-| `context` | string | `.` | Build context |
-| `build-args` | string | `""` | Build arguments |
-| `platforms` | string | `""` | Target platforms |
-| `push-latest` | boolean | `true` | Also push :latest |
-
-**Secrets:** `GORDON_REGISTRY`, `GORDON_USERNAME`, `GORDON_TOKEN`
-
----
-
-## Pre-release Tags
-
-The `go-release.yml` workflow is triggered by `tags: ['v*']` in the caller, which matches both stable and pre-release tags:
-- `v1.0.0` — stable release
-- `v1.0.0-rc.1` — release candidate
-- `v1.0.0-alpha.1` — alpha
-- `v1.0.0-beta.2` — beta
-
-Add this to your `.goreleaser.yaml` for correct pre-release handling:
+The composite action at `actions/docker-deploy` works with any OCI registry, not just Gordon:
 
 ```yaml
-release:
-  prerelease: auto       # auto-detect from tag suffix
-git:
-  tag_sort: smartsemver  # correct changelog for mixed stable/pre-release
+- uses: bnema/gh-actions/actions/docker-deploy@main
+  with:
+    registry: ghcr.io
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}
+    image: my-app
+    platforms: linux/amd64,linux/arm64
 ```
 
-`prerelease: auto` detects semver pre-release suffixes and marks the GitHub release as a pre-release. `smartsemver` (GoReleaser v2.12+) ensures changelogs compare against the previous stable release, not the last pre-release.
+## Inputs Reference
 
----
+### go-ci.yml
 
-## Recommended `.golangci.yml` (v2 starter)
+| Input | Default | Description |
+|-------|---------|-------------|
+| `go-version` | `stable` | Go version |
+| `lint-timeout` | `5m` | golangci-lint timeout |
+| `lint-version` | `v2.8.0` | golangci-lint version |
+| `test-flags` | `-race -v ./...` | Flags for `go test` |
+| `pre-command` | | Run before lint and test |
+| `container` | | Container image to run in |
+| `apt-packages` | | Space-separated apt packages |
+| `pacman-packages` | | Space-separated pacman packages |
+
+### go-release.yml
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `go-version` | `stable` | Go version |
+| `goreleaser-version` | `~> v2` | GoReleaser version constraint |
+| `goreleaser-args` | `release --clean` | GoReleaser CLI arguments |
+| `node-version` | | Node.js version (skip if empty) |
+| `apt-packages` | | Space-separated apt packages |
+| `pre-command` | | Run before GoReleaser |
+
+Requires `GITHUB_TOKEN` secret.
+
+### frontend-ci.yml
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `node-version` | `24` | Node.js version |
+| `package-manager` | `npm` | `npm` or `bun` |
+| `working-directory` | `.` | Directory with package.json |
+| `run-svelte-check` | `true` | Run svelte-check |
+| `run-tsc` | `false` | Run tsc --noEmit |
+| `run-eslint` | `true` | Run ESLint |
+| `eslint-args` | `src` | Arguments passed to eslint |
+
+### gordon-deploy.yml
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `image` | repo name | Container image name |
+| `tag` | git tag or SHA | Image tag |
+| `dockerfile` | `./Dockerfile` | Dockerfile path |
+| `context` | `.` | Build context |
+| `build-args` | | Build arguments, one per line |
+| `platforms` | | Target platforms |
+| `push-latest` | `true` | Also tag as :latest |
+
+Requires `GORDON_REGISTRY`, `GORDON_USERNAME`, `GORDON_TOKEN` secrets.
+
+### dependabot-auto-merge.yml
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `merge-method` | `squash` | squash, merge, or rebase |
+
+## golangci-lint v2 Starter Config
+
+A starting point for new Go projects. Copy and adapt per project.
 
 ```yaml
 version: "2"
@@ -200,13 +224,11 @@ run:
 linters:
   default: none
   enable:
-    # Standard
     - govet
     - errcheck
     - staticcheck
     - unused
     - ineffassign
-    # Quality
     - revive
     - gocritic
     - gocyclo
@@ -218,21 +240,15 @@ linters:
     - misspell
     - whitespace
     - nolintlint
-    # Security
     - gosec
-    # Modern Go (v2.0+)
     - modernize
     - fatcontext
     - intrange
     - copyloopvar
     - exptostd
-    # Error handling
     - errorlint
-    # HTTP
     - bodyclose
-    # Magic numbers
     - mnd
-    # Line length
     - lll
 
   settings:
@@ -244,9 +260,7 @@ linters:
       checks: [argument, case, condition, return]
       ignored-numbers: ['0', '1', '2', '3', '10', '100']
     govet:
-      enable:
-        - nilness
-        - shadow
+      enable: [nilness, shadow]
     errorlint:
       asserts: false
     nolintlint:
@@ -276,44 +290,21 @@ severity:
   default: error
 ```
 
-### Key v2 changes
-- **`formatters:` section** — formatters (gofmt, goimports) are separate from linters
-- **`default: none|standard|all|fast`** — replaces `enable-all`
-- **`exclusions:`** — replaces `issues.exclude-rules`
+Notable v2 changes from v1: formatters live in their own `formatters:` section, `default: none|standard|all|fast` replaces `enable-all`, and `exclusions:` replaces `issues.exclude-rules`.
 
-### New linters worth enabling
-| Linter | Description |
-|--------|-------------|
-| `modernize` | Suggests modern Go patterns (slices.Sort, range-over-int, etc.) |
-| `fatcontext` | Detects nested context.WithValue in loops |
-| `intrange` | Suggests `for range N` (Go 1.22+) |
-| `copyloopvar` | Flags unnecessary loop variable copies |
-| `exptostd` | Flags `x/exp` functions replaceable by stdlib |
+New linters worth knowing about:
 
----
+- `modernize` flags patterns that have simpler alternatives in recent Go (range-over-int, slices package, etc.)
+- `fatcontext` catches context.WithValue calls inside loops
+- `intrange` suggests `for range N` syntax from Go 1.22
+- `copyloopvar` flags unnecessary loop variable copies (Go 1.22 changed loop variable semantics)
+- `exptostd` finds `golang.org/x/exp` functions that now exist in the standard library
 
-## Docker Deploy Action
+## What stays in each repo
 
-The `actions/docker-deploy` composite action can be used directly for non-Gordon registries:
+These workflows handle the shared CI/CD plumbing. Project-specific configuration stays local:
 
-```yaml
-- uses: bnema/gh-actions/actions/docker-deploy@main
-  with:
-    registry: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
-    image: my-app
-    platforms: linux/amd64,linux/arm64
-```
-
----
-
-## Per-repo Customization
-
-Each consumer repo keeps its own:
-- **`.golangci.yml`** — project-specific linter rules and exclusions
-- **`.goreleaser.yaml`** — build targets, archives, release notes
-- **`eslint.config.js`** — ESLint rules and plugins
-- **Specialized workflows** — AUR publishing, Flatpak builds, etc.
-
-The reusable workflows handle the common CI/CD plumbing; project-specific config stays local.
+- `.golangci.yml` for linter rules and exclusions
+- `.goreleaser.yaml` for build targets, archives, and release notes
+- `eslint.config.js` for ESLint rules and plugins
+- Specialized workflows like AUR publishing or Flatpak builds
