@@ -1,0 +1,79 @@
+name: Discord Notification
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: 'Embed title'
+        type: string
+        required: true
+      description:
+        description: 'Embed description'
+        type: string
+        default: ''
+      url:
+        description: 'Embed URL'
+        type: string
+        default: ''
+      color:
+        description: 'Embed color (decimal)'
+        type: number
+        default: 3447003
+      fields:
+        description: 'JSON array of embed fields [{name, value, inline}]'
+        type: string
+        default: '[]'
+      footer:
+        description: 'Footer text'
+        type: string
+        default: ''
+    secrets:
+      discord-webhook-url:
+        description: 'Discord webhook URL'
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.discord-webhook-url }}
+          EMBED_TITLE: ${{ inputs.title }}
+          EMBED_DESC: ${{ inputs.description }}
+          EMBED_URL: ${{ inputs.url }}
+          EMBED_COLOR: ${{ inputs.color }}
+          EMBED_FIELDS: ${{ inputs.fields }}
+          EMBED_FOOTER: ${{ inputs.footer }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$EMBED_TITLE" \
+            --arg desc "$EMBED_DESC" \
+            --arg url "$EMBED_URL" \
+            --argjson color "$EMBED_COLOR" \
+            --argjson fields "$EMBED_FIELDS" \
+            --arg footer "$EMBED_FOOTER" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              embeds: [{
+                title: $title,
+                description: (if $desc == "" then null else $desc end),
+                url: (if $url == "" then null else $url end),
+                color: $color,
+                fields: $fields,
+                timestamp: $ts,
+                footer: (if $footer == "" then null else { text: $footer } end)
+              }]
+            }')
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL")
+
+          if [[ "$STATUS" -lt 200 || "$STATUS" -ge 300 ]]; then
+            echo "::error::Discord webhook returned HTTP $STATUS"
+            exit 1
+          fi
+
+          echo "Discord notification sent (HTTP $STATUS)"
