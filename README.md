@@ -10,9 +10,7 @@ Shared GitHub Actions workflows. Add CI, releases, and deploys to a repo with a 
 | `go-release.yml` | GoReleaser build on tag push (supports pre-releases) |
 | `frontend-ci.yml` | svelte-check, tsc, and/or ESLint (npm or bun) |
 | `dependabot-auto-merge.yml` | Auto-merge patch/minor Dependabot PRs |
-| `gordon-deploy.yml` | Build and push a container to a Gordon registry |
-
-There's also a standalone composite action at `actions/docker-deploy` for pushing to any OCI registry.
+| `discord-notify.yml` | Send Discord embed notifications via webhook |
 
 ## Usage
 
@@ -106,22 +104,31 @@ ESLint uses the project's own `eslint.config.js`. If that config includes `eslin
 
 ### Gordon Deploy
 
+Gordon ships its own deploy action at [`bnema/gordon/.github/actions/deploy`](https://github.com/bnema/gordon). Use it directly:
+
 ```yaml
-name: Deploy
+name: Gordon Deploy
 on:
   push:
     tags: ['v*']
 
 jobs:
   deploy:
-    uses: bnema/gh-actions/.github/workflows/gordon-deploy.yml@main
-    with:
-      image: my-app
-    secrets:
-      GORDON_REGISTRY: ${{ secrets.GORDON_REGISTRY }}
-      GORDON_USERNAME: ${{ secrets.GORDON_USERNAME }}
-      GORDON_TOKEN: ${{ secrets.GORDON_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bnema/gordon/.github/actions/deploy@main
+        with:
+          registry: ${{ secrets.GORDON_REGISTRY }}
+          username: ${{ secrets.GORDON_USERNAME }}
+          password: ${{ secrets.GORDON_TOKEN }}
+          image: my-app
 ```
+
+Secrets setup:
+- `GORDON_REGISTRY` — registry hostname (e.g. `registry.mydomain.com`)
+- `GORDON_USERNAME` — token subject
+- `GORDON_TOKEN` — JWT from `gordon auth token generate --subject <name> --scopes push --expiry 0`
 
 ### Dependabot Auto-Merge
 
@@ -135,20 +142,6 @@ jobs:
 ```
 
 Merges patch and minor updates automatically. Major versions require manual review.
-
-### Docker Deploy (standalone action)
-
-The composite action at `actions/docker-deploy` works with any OCI registry, not just Gordon:
-
-```yaml
-- uses: bnema/gh-actions/actions/docker-deploy@main
-  with:
-    registry: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
-    image: my-app
-    platforms: linux/amd64,linux/arm64
-```
 
 ## Inputs Reference
 
@@ -189,20 +182,6 @@ Requires `GITHUB_TOKEN` secret.
 | `run-tsc` | `false` | Run tsc --noEmit |
 | `run-eslint` | `true` | Run ESLint |
 | `eslint-args` | `src` | Arguments passed to eslint |
-
-### gordon-deploy.yml
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `image` | repo name | Container image name |
-| `tag` | git tag or SHA | Image tag |
-| `dockerfile` | `./Dockerfile` | Dockerfile path |
-| `context` | `.` | Build context |
-| `build-args` | | Build arguments, one per line |
-| `platforms` | | Target platforms |
-| `push-latest` | `true` | Also tag as :latest |
-
-Requires `GORDON_REGISTRY`, `GORDON_USERNAME`, `GORDON_TOKEN` secrets.
 
 ### dependabot-auto-merge.yml
 
