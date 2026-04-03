@@ -35,10 +35,43 @@ on:
         description: 'Space-separated pacman packages to install'
         type: string
         default: ''
+      paths-filter:
+        description: 'Skip lint/test when only non-Go files change (requires dorny/paths-filter)'
+        type: boolean
+        default: false
+      paths-filter-patterns:
+        description: 'dorny/paths-filter patterns (YAML string)'
+        type: string
+        default: |
+          go:
+            - '**.go'
+            - 'go.mod'
+            - 'go.sum'
+            - '.golangci.yml'
+            - 'Makefile'
+            - '.github/workflows/**'
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      go: ${{ inputs.paths-filter && steps.filter.outputs.go || 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+        if: inputs.paths-filter
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: inputs.paths-filter
+        with:
+          filters: ${{ inputs.paths-filter-patterns }}
+
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     container: ${{ inputs.container || null }}
     steps:
@@ -80,6 +113,8 @@ jobs:
 
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     container: ${{ inputs.container || null }}
     steps:
