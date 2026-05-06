@@ -34,6 +34,14 @@ jobs:
       go-version: stable
 ```
 
+To route CI through project Make targets:
+
+```yaml
+    with:
+      lint-command: make lint
+      test-command: make test
+```
+
 If you need to run something before lint/test (code generation, frontend build), use `pre-command`:
 
 ```yaml
@@ -151,8 +159,10 @@ Merges patch and minor updates automatically. Major versions require manual revi
 |-------|---------|-------------|
 | `go-version` | `stable` | Go version |
 | `lint-timeout` | `5m` | golangci-lint timeout |
-| `lint-version` | `v2.8.0` | golangci-lint version |
+| `lint-version` | `latest` | golangci-lint version |
+| `lint-command` | | Optional project lint command; when set, runs instead of `golangci-lint-action` |
 | `test-flags` | `-race -v ./...` | Flags for `go test` |
+| `test-command` | | Optional project test command; when set, runs instead of `go test` |
 | `pre-command` | | Run before lint and test |
 | `container` | | Container image to run in |
 | `apt-packages` | | Space-separated apt packages |

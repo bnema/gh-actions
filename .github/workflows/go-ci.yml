@@ -14,11 +14,19 @@ on:
       lint-version:
         description: 'golangci-lint version'
         type: string
-        default: 'v2.8.0'
+        default: 'latest'
+      lint-command:
+        description: 'Optional project lint command. When set, this runs instead of golangci-lint-action.'
+        type: string
+        default: ''
       test-flags:
         description: 'Flags passed to go test'
         type: string
         default: '-race -v ./...'
+      test-command:
+        description: 'Optional project test command. When set, this runs instead of go test.'
+        type: string
+        default: ''
       pre-command:
         description: 'Command to run before lint/test (e.g. make build-frontend)'
         type: string
@@ -106,10 +114,15 @@ jobs:
         run: ${{ inputs.pre-command }}
 
       - name: Run golangci-lint
+        if: inputs.lint-command == ''
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ inputs.lint-version }}
           args: --timeout=${{ inputs.lint-timeout }}
+
+      - name: Run lint command
+        if: inputs.lint-command != ''
+        run: ${{ inputs.lint-command }}
 
   test:
     name: Test
@@ -157,4 +170,9 @@ jobs:
         run: ${{ inputs.pre-command }}
 
       - name: Run tests
+        if: inputs.test-command == ''
         run: go test ${{ inputs.test-flags }}
+
+      - name: Run test command
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
