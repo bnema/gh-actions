@@ -27,9 +27,6 @@ on:
         description: 'Command to run before goreleaser'
         type: string
         default: ''
-    secrets:
-      GITHUB_TOKEN:
-        required: true
 
 permissions:
   contents: write
@@ -71,4 +68,4 @@ jobs:
           version: ${{ inputs.goreleaser-version }}
           args: ${{ inputs.goreleaser-args }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}

@@ -70,8 +70,6 @@ jobs:
     uses: bnema/gh-actions/.github/workflows/go-release.yml@main
     with:
       go-version: stable
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 The `v*` pattern matches stable tags (`v1.0.0`) and pre-release tags (`v1.0.0-rc.1`, `v1.0.0-alpha.1`). GoReleaser handles the distinction if your `.goreleaser.yaml` includes:
@@ -179,7 +177,7 @@ Merges patch and minor updates automatically. Major versions require manual revi
 | `apt-packages` | | Space-separated apt packages |
 | `pre-command` | | Run before GoReleaser |
 
-Requires `GITHUB_TOKEN` secret.
+Uses the caller workflow's built-in `GITHUB_TOKEN` automatically.
 
 ### frontend-ci.yml
 
