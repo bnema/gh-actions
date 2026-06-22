@@ -10,7 +10,7 @@ on:
       goreleaser-version:
         description: 'GoReleaser version'
         type: string
-        default: '~> v2'
+        default: 'v2.9.0'
       goreleaser-args:
         description: 'GoReleaser arguments'
         type: string
@@ -42,7 +42,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ${{ inputs.apt-packages }}
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -51,13 +51,13 @@ jobs:
         run: git fetch --force --tags
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version: ${{ inputs.go-version }}
 
       - name: Setup Node.js
         if: inputs.node-version != ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: ${{ inputs.node-version }}
 
@@ -66,7 +66,7 @@ jobs:
         run: ${{ inputs.pre-command }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a
         with:
           distribution: goreleaser
           version: ${{ inputs.goreleaser-version }}
