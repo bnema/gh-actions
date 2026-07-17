@@ -70,7 +70,11 @@ jobs:
     uses: bnema/gh-actions/.github/workflows/go-release.yml@main
     with:
       go-version: stable
+    secrets:
+      AUR_KEY: ${{ secrets.AUR_KEY }}
 ```
+
+`AUR_KEY` is optional and is passed only to the GoReleaser step for AUR publishing. Add it as a repository secret in the calling repository, or as an organization secret granted to that repository; omit the `secrets` block when AUR publishing is not needed.
 
 The `v*` pattern matches stable tags (`v1.0.0`) and pre-release tags (`v1.0.0-rc.1`, `v1.0.0-alpha.1`). GoReleaser handles the distinction if your `.goreleaser.yaml` includes:
 
@@ -177,7 +181,7 @@ Merges patch and minor updates automatically. Major versions require manual revi
 | `apt-packages` | | Space-separated apt packages |
 | `pre-command` | | Run before GoReleaser |
 
-Uses the caller workflow's built-in `GITHUB_TOKEN` automatically.
+Uses the caller workflow's built-in `GITHUB_TOKEN` automatically. For GoReleaser AUR publishing, pass the optional `AUR_KEY` secret from the caller as shown above; it is exposed only to the GoReleaser step.
 
 ### frontend-ci.yml
 
