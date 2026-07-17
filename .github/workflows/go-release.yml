@@ -27,6 +27,10 @@ on:
         description: 'Command to run before goreleaser'
         type: string
         default: ''
+    secrets:
+      AUR_KEY:
+        description: 'Optional SSH private key for GoReleaser AUR publishing'
+        required: false
 
 permissions:
   contents: write
@@ -73,3 +77,4 @@ jobs:
           args: ${{ inputs.goreleaser-args }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
