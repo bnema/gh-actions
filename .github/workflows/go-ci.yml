@@ -68,7 +68,7 @@ jobs:
     outputs:
       go: ${{ inputs.paths-filter && steps.filter.outputs.go || 'true' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         if: inputs.paths-filter
       - uses: dorny/paths-filter@v4
         id: filter
@@ -94,7 +94,7 @@ jobs:
           pacman -Syu --noconfirm ${{ inputs.pacman-packages }}
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -142,7 +142,7 @@ jobs:
           pacman -Syu --noconfirm ${{ inputs.pacman-packages }}
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Go
         uses: actions/setup-go@v6
