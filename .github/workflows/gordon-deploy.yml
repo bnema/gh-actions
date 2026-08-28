@@ -1,0 +1,94 @@
+name: Gordon Deploy
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image name (defaults to the repository name)
+        type: string
+        default: ""
+      tag:
+        description: Override image tag (defaults to the Git tag or short SHA)
+        type: string
+        default: ""
+      dockerfile:
+        description: Path to the Dockerfile
+        type: string
+        default: ./Dockerfile
+      context:
+        description: Build context path
+        type: string
+        default: .
+      platforms:
+        description: Target platforms, for example linux/amd64,linux/arm64
+        type: string
+        default: ""
+      push-latest:
+        description: Also push the latest tag
+        type: boolean
+        default: true
+      cache-from:
+        description: BuildKit cache source
+        type: string
+        default: type=gha
+      cache-to:
+        description: BuildKit cache destination
+        type: string
+        default: type=gha,mode=max
+    secrets:
+      GORDON_REGISTRY:
+        description: Gordon registry hostname without a URL scheme
+        required: true
+      GORDON_USERNAME:
+        description: Gordon token subject
+        required: true
+      GORDON_TOKEN:
+        description: Gordon registry credential
+        required: true
+    outputs:
+      image:
+        description: Full tagged image reference
+        value: ${{ jobs.deploy.outputs.image }}
+      tag:
+        description: Image tag
+        value: ${{ jobs.deploy.outputs.tag }}
+      digest:
+        description: Pushed image digest
+        value: ${{ jobs.deploy.outputs.digest }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gordon-deploy-${{ github.repository }}-${{ inputs.image || github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and push
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.deploy.outputs.image }}
+      tag: ${{ steps.deploy.outputs.tag }}
+      digest: ${{ steps.deploy.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Deploy to Gordon
+        id: deploy
+        uses: bnema/gordon/.github/actions/deploy@e02f6546f2612bb46eb3b987defdf24b6e53cd7f # v2.31.0-dev23-13
+        with:
+          registry: ${{ secrets.GORDON_REGISTRY }}
+          username: ${{ secrets.GORDON_USERNAME }}
+          password: ${{ secrets.GORDON_TOKEN }}
+          image: ${{ inputs.image }}
+          tag: ${{ inputs.tag }}
+          dockerfile: ${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          platforms: ${{ inputs.platforms }}
+          push-latest: ${{ inputs.push-latest }}
+          cache-from: ${{ inputs.cache-from }}
+          cache-to: ${{ inputs.cache-to }}

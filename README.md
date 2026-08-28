@@ -9,6 +9,7 @@ Shared GitHub Actions workflows. Add CI, releases, and deploys to a repo with a 
 | `go-ci.yml` | Lint with golangci-lint v2 + run tests |
 | `go-release.yml` | GoReleaser build on tag push (supports pre-releases) |
 | `frontend-ci.yml` | svelte-check, tsc, and/or ESLint (npm or bun) |
+| `gordon-deploy.yml` | Build and push an OCI image to Gordon |
 | `dependabot-auto-merge.yml` | Auto-merge patch/minor Dependabot PRs |
 | `discord-notify.yml` | Send Discord embed notifications via webhook |
 
@@ -110,31 +111,28 @@ ESLint uses the project's own `eslint.config.js`. If that config includes `eslin
 
 ### Gordon Deploy
 
-Gordon ships its own deploy action at [`bnema/gordon/.github/actions/deploy`](https://github.com/bnema/gordon). Use it directly:
+Build and push an image to Gordon after each update to `main`:
 
 ```yaml
-name: Gordon Deploy
+name: Deploy
 on:
   push:
-    tags: ['v*']
+    branches: [main]
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: bnema/gordon/.github/actions/deploy@main
-        with:
-          registry: ${{ secrets.GORDON_REGISTRY }}
-          username: ${{ secrets.GORDON_USERNAME }}
-          password: ${{ secrets.GORDON_TOKEN }}
-          image: my-app
+    uses: bnema/gh-actions/.github/workflows/gordon-deploy.yml@main
+    with:
+      image: my-app
+    secrets:
+      GORDON_REGISTRY: ${{ secrets.GORDON_REGISTRY }}
+      GORDON_USERNAME: ${{ secrets.GORDON_USERNAME }}
+      GORDON_TOKEN: ${{ secrets.GORDON_TOKEN }}
 ```
 
-Secrets setup:
-- `GORDON_REGISTRY` — registry hostname (e.g. `registry.mydomain.com`)
-- `GORDON_USERNAME` — token subject
-- `GORDON_TOKEN` — JWT from `gordon auth token generate --subject <name> --scopes push --expiry 0`
+The workflow publishes a short-SHA tag and, by default, `latest`. Gordon deploys routes that match either pushed tag. Concurrent runs for the same repository, image, and ref cancel stale builds so an older run cannot overwrite `latest`. Set `push-latest: false` when a route follows only commit-derived tags; use the `digest` output when an immutable image reference is required.
+
+Store `GORDON_REGISTRY`, `GORDON_USERNAME`, and `GORDON_TOKEN` as repository or organization secrets so deployment details do not appear in the caller workflow. Give the project-specific token push access only to the required image repository.
 
 ### Dependabot Auto-Merge
 
@@ -190,6 +188,21 @@ Uses the caller workflow's built-in `GITHUB_TOKEN` automatically.
 | `run-tsc` | `false` | Run tsc --noEmit |
 | `run-eslint` | `true` | Run ESLint |
 | `eslint-args` | `src` | Arguments passed to eslint |
+
+### gordon-deploy.yml
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `image` | repository name | Image repository name |
+| `tag` | Git tag or short SHA | Image tag override |
+| `dockerfile` | `./Dockerfile` | Dockerfile path |
+| `context` | `.` | Build context |
+| `platforms` | | Comma-separated target platforms |
+| `push-latest` | `true` | Also publish `latest` |
+| `cache-from` | `type=gha` | BuildKit cache source |
+| `cache-to` | `type=gha,mode=max` | BuildKit cache destination |
+
+Outputs: `image`, `tag`, and `digest`.
 
 ### dependabot-auto-merge.yml
 
