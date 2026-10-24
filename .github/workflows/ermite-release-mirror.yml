@@ -1,0 +1,162 @@
+# Publishes a link-only GitHub release for a release hosted on ermite.
+#
+# The caller runs on the GitHub mirror when a tag arrives. This workflow reads
+# the ermite release through its public GitHub-compatible API, copies its
+# notes, and appends a Downloads table that links to the ermite assets. No file
+# is uploaded to GitHub and no token other than the job's GITHUB_TOKEN is used.
+#
+# Caller (.github/workflows/github-release.yml):
+#
+#   on:
+#     push:
+#       tags: ['v*']
+#     workflow_dispatch:
+#       inputs:
+#         tag: {description: 'Tag to mirror', required: true, type: string}
+#   permissions:
+#     contents: write
+#   jobs:
+#     release:
+#       if: github.server_url == 'https://github.com'
+#       uses: bnema/gh-actions/.github/workflows/ermite-release-mirror.yml@main
+#       with:
+#         tag: ${{ inputs.tag }}
+name: Ermite Release Mirror
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Tag to mirror (default: the pushed tag)'
+        type: string
+        default: ''
+      repository:
+        description: 'Repository name on ermite (default: the GitHub repository name)'
+        type: string
+        default: ''
+      forge:
+        description: 'ermite base URL'
+        type: string
+        default: 'https://git.bnema.dev'
+      owner:
+        description: 'Owner segment of the ermite GitHub-compatible API'
+        type: string
+        default: 'bnema'
+      wait-minutes:
+        description: 'How long to wait for the ermite release to be published'
+        type: number
+        default: 30
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    name: Mirror release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 45
+    steps:
+      - name: Build the release notes from ermite
+        id: notes
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REPOSITORY: ${{ inputs.repository }}
+          FORGE: ${{ inputs.forge }}
+          OWNER: ${{ inputs.owner }}
+          WAIT_MINUTES: ${{ inputs.wait-minutes }}
+        shell: python
+        run: |
+          import json, os, re, sys, time, urllib.error, urllib.request
+
+          tag = os.environ["INPUT_TAG"] or os.environ["GITHUB_REF_NAME"]
+          repo = os.environ["INPUT_REPOSITORY"] or os.environ["GITHUB_REPOSITORY"].split("/", 1)[1]
+          forge = os.environ["FORGE"].rstrip("/")
+          owner = os.environ["OWNER"]
+          for name, value in (("tag", tag), ("repository", repo), ("owner", owner)):
+              if not re.fullmatch(r"[A-Za-z0-9._+-]+", value):
+                  sys.exit(f"invalid {name}: {value!r}")
+          if not re.fullmatch(r"https://[A-Za-z0-9.-]+(:[0-9]+)?", forge):
+              sys.exit(f"forge must be an https origin, got {forge!r}")
+
+          url = f"{forge}/-/github/api/repos/{owner}/{repo}/releases/tags/{tag}"
+          deadline = time.monotonic() + float(os.environ["WAIT_MINUTES"]) * 60
+          while True:
+              try:
+                  req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      release = json.load(resp)
+                  if not release.get("draft"):
+                      break
+                  reason = "still a draft"
+              except urllib.error.HTTPError as err:
+                  if err.code != 404:
+                      raise
+                  reason = "not published yet"
+              if time.monotonic() > deadline:
+                  sys.exit(f"ermite release {repo} {tag} {reason} after waiting; re-run this job once it is published")
+              print(f"ermite release {tag} {reason}, retrying in 30s", flush=True)
+              time.sleep(30)
+
+          def size(n):
+              for unit in ("B", "KB", "MB", "GB"):
+                  if n < 1024 or unit == "GB":
+                      return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+                  n /= 1024
+
+          # GitHub marks as latest only the release ermite marks as latest.
+          latest = False
+          try:
+              req = urllib.request.Request(f"{forge}/-/github/api/repos/{owner}/{repo}/releases/latest",
+                                           headers={"Accept": "application/vnd.github+json"})
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  latest = json.load(resp).get("tag_name") == tag
+          except urllib.error.HTTPError as err:
+              if err.code != 404:
+                  raise
+
+          page = release.get("html_url") or f"{forge}/{repo}/releases/tag/{tag}"
+          lines = [(release.get("body") or "").rstrip(), "", "## Downloads", ""]
+          lines.append(f"This project is developed on [ermite]({forge}/{repo}). "
+                       f"Release files are hosted there: {page}")
+          assets = sorted(release.get("assets") or [], key=lambda a: a["name"])
+          if assets:
+              lines += ["", "| File | Size |", "|---|---|"]
+              for a in assets:
+                  link = a["browser_download_url"]
+                  if not link.startswith(forge + "/"):
+                      sys.exit(f"asset URL outside {forge}: {link}")
+                  name = a["name"].replace("|", "\\|")
+                  lines.append(f"| [{name}]({link}) | {size(a.get('size') or 0)} |")
+          notes = "\n".join(lines).lstrip() + "\n"
+
+          runner_temp = os.environ["RUNNER_TEMP"]
+          with open(os.path.join(runner_temp, "notes.md"), "w") as f:
+              f.write(notes)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"tag={tag}\n")
+              f.write(f"title={release.get('name') or tag}\n")
+              f.write(f"prerelease={'true' if release.get('prerelease') else 'false'}\n")
+              f.write(f"latest={'true' if latest else 'false'}\n")
+          print(notes)
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.notes.outputs.tag }}
+          TITLE: ${{ steps.notes.outputs.title }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
+          LATEST: ${{ steps.notes.outputs.latest }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/notes.md"
+          flags=(--title "$TITLE" --notes-file "$notes" "--prerelease=$PRERELEASE" "--latest=$LATEST")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" "${flags[@]}" --draft=false
+          else
+            gh release create "$TAG" "${flags[@]}" --verify-tag
+          fi
+          gh release view "$TAG" --json url,isPrerelease,assets \
+            --jq '{url, isPrerelease, assets: (.assets | length)}'
