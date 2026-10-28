@@ -79,7 +79,7 @@ jobs:
 
       - name: Deploy to Gordon
         id: deploy
-        uses: bnema/gordon/.github/actions/deploy@de8f68e191de6327b3b6a4b9c74404f60ad81217 # v2.31.0-dev23-13
+        uses: bnema/gordon/.github/actions/deploy@276bdbc04a6a43586acf43276f4f3fcf50b6ba92 # v2.31.0-dev23-13
         with:
           registry: ${{ secrets.GORDON_REGISTRY }}
           username: ${{ secrets.GORDON_USERNAME }}
